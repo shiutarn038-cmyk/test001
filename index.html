@@ -559,7 +559,9 @@
 
       card.appendChild(textLayer);
       board.appendChild(card);
-      requestAnimationFrame(() => textLayer.classList.add('visible'));
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => textLayer.classList.add('visible'));
+      });
 
       const remaining = LIFETIME - age;
       setTimeout(() => {
