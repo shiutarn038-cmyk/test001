@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>訊息牆</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#FFFFFF;
+    --panel:#FAFAF8;
+    --panel-edge:#E4E2DC;
+    --paper:#111111;
+    --amber:#111111;
+    --teal:#0A7A6C;
+    --dim:#8A8A82;
+    --err:#C4443B;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+  a{ color:inherit; }
+  button{ font-family:'Inter', sans-serif; }
+
+  /* ---------- SHARED CONTROL LAYOUT ---------- */
+  .control-page{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:36px 20px 60px;
+  }
+  .control-box{
+    width:100%;
+    max-width:460px;
+  }
+  .back-link{
+    display:inline-block;
+    font-size:13px;
+    color:var(--dim);
+    text-decoration:none;
+    margin-bottom:18px;
+  }
+  .control-box h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:24px;
+    margin:0 0 22px;
+  }
+  .ctrl-label{
+    font-size:13px;
+    color:var(--dim);
+    margin-bottom:10px;
+  }
+
+  /* menu list */
+  .menu-list{ border-top:1px solid var(--panel-edge); }
+  .menu-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding:18px 2px;
+    border-bottom:1px solid var(--panel-edge);
+    text-decoration:none;
+    color:var(--paper);
+  }
+  .menu-row-title{
+    font-family:'Fraunces', serif;
+    font-size:17px;
+    margin-bottom:3px;
+  }
+  .menu-row-desc{
+    font-size:13px;
+    color:var(--dim);
+  }
+  .menu-row-arrow{ color:var(--dim); font-size:18px; }
+
+  /* share page */
+  .link-row{ display:flex; gap:8px; align-items:center; }
+  .link-row input{
+    flex:1;
+    font-size:13px;
+    color:var(--dim);
+    border:1px solid var(--panel-edge);
+    border-radius:6px;
+    padding:10px 12px;
+    background:var(--panel);
+  }
+  .copy-btn, .plain-btn{
+    border:1px solid var(--panel-edge);
+    background:#fff;
+    border-radius:6px;
+    padding:10px 14px;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .qr-wrap{ margin-top:16px; }
+  .qr-wrap img{
+    width:180px; height:180px;
+    border:1px solid var(--panel-edge);
+    border-radius:8px; padding:8px; background:#fff;
+  }
+  .setup-note{
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius:8px;
+    padding:16px;
+    font-size:13px;
+    line-height:1.7;
+    color:#333;
+    margin-bottom:22px;
+  }
+  .setup-note code{
+    background:#fff; border:1px solid var(--panel-edge);
+    border-radius:4px; padding:1px 5px; font-size:12px;
+  }
+
+  /* questions page */
+  .q-item{
+    display:flex; justify-content:space-between; align-items:center;
+    gap:10px; padding:12px 2px; border-bottom:1px solid var(--panel-edge);
+    font-size:15px;
+  }
+  .q-item .q-del{
+    border:none; background:none; color:var(--err);
+    font-size:18px; cursor:pointer; line-height:1; padding:4px;
+  }
+  .q-add-row{ display:flex; gap:8px; margin-top:16px; }
+  .q-add-row input{
+    flex:1; font-size:14px; padding:10px 12px;
+    border:1px solid var(--panel-edge); border-radius:6px;
+    background:var(--panel); font-family:'Inter', sans-serif;
+  }
+  .q-add-row button{
+    border:none; background:var(--amber); color:#fff;
+    border-radius:6px; padding:10px 16px; font-size:14px; cursor:pointer;
+  }
+
+  /* log page */
+  table.log-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.log-table th, table.log-table td{
+    text-align:left; padding:10px 6px; border-bottom:1px solid var(--panel-edge);
+    vertical-align:top;
+  }
+  table.log-table th{ color:var(--dim); font-weight:500; }
+  .log-time{ white-space:nowrap; color:var(--dim); width:78px; }
+  .log-empty{ color:var(--dim); font-size:14px; padding:20px 2px; }
+
+  /* preview page */
+  .preview-frame-wrap{
+    border:1px solid var(--panel-edge);
+    border-radius:10px;
+    overflow:hidden;
+    aspect-ratio:16/9;
+    background:#fff;
+  }
+  .preview-frame-wrap iframe{ width:100%; height:100%; border:none; }
+
+  /* ---------- WALL VIEW ---------- */
+  #wall-view{
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    padding:40px 32px;
+  }
+  #board{ flex:1; position:relative; width:100%; overflow:hidden; }
+  .msg-card{ position:absolute; opacity:0; transition:opacity 0.8s ease; }
+  .msg-card.visible{ opacity:1; }
+  .msg-card.fading{ opacity:0; transition:opacity 4s ease; }
+  .msg-card canvas{
+    display:block;
+    animation:wobble 3.4s ease-in-out infinite;
+    will-change:transform;
+  }
+  @keyframes wobble{
+    0%{   transform:translate(0,0) rotate(0deg); }
+    25%{  transform:translate(1.4px,-1px) rotate(0.6deg); }
+    50%{  transform:translate(-1px,1.4px) rotate(-0.5deg); }
+    75%{  transform:translate(-1.4px,-1px) rotate(0.4deg); }
+    100%{ transform:translate(0,0) rotate(0deg); }
+  }
+
+  /* ---------- SUBMIT VIEW ---------- */
+  #submit-view{
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 20px;
+  }
+  .submit-box{ width:100%; max-width:400px; }
+  .q-label{ font-size:13px; color:var(--dim); margin-bottom:10px; }
+  .submit-box h1{
+    font-family:'Fraunces', serif; font-weight:600;
+    font-size:28px; line-height:1.35; margin:0 0 28px;
+  }
+  textarea{
+    width:100%; min-height:120px;
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:6px;
+    color:var(--paper); font-family:'Fraunces', serif; font-size:18px;
+    line-height:1.5; padding:16px; resize:vertical;
+  }
+  textarea:focus{ outline:2px solid var(--teal); outline-offset:2px; }
+  .char-count{ text-align:right; font-size:12px; color:var(--dim); margin-top:6px; }
+  button.send{
+    width:100%; margin-top:18px; background:var(--amber); color:#FFFFFF;
+    border:none; border-radius:6px; padding:15px; font-size:16px; font-weight:600;
+    cursor:pointer; transition:transform 0.15s ease;
+  }
+  button.send:active{ transform:scale(0.98); }
+  button.send:disabled{ opacity:0.5; cursor:default; }
+  .status-msg{ margin-top:16px; font-size:14px; min-height:20px; }
+  .status-msg.ok{ color:var(--teal); }
+  .status-msg.err{ color:var(--err); }
+</style>
+</head>
+<body>
+
+<!-- 控制台主選單 -->
+<div id="control-view" class="control-page" style="display:none;">
+  <div class="control-box">
+    <h1>控制台</h1>
+    <div id="setup-slot"></div>
+    <div class="menu-list">
+      <a class="menu-row" href="#wall" target="_blank" rel="noopener">
+        <div><div class="menu-row-title">投影畫面</div><div class="menu-row-desc">開新分頁,接投影機或大螢幕</div></div>
+        <div class="menu-row-arrow">↗</div>
+      </a>
+      <a class="menu-row" href="#control-preview">
+        <div><div class="menu-row-title">牆面預覽</div><div class="menu-row-desc">在這裡先看看效果</div></div>
+        <div class="menu-row-arrow">›</div>
+      </a>
+      <a class="menu-row" href="#control-share">
+        <div><div class="menu-row-title">投稿連結 / QR code</div><div class="menu-row-desc">給大家掃碼填寫</div></div>
+        <div class="menu-row-arrow">›</div>
+      </a>
+      <a class="menu-row" href="#control-questions">
+        <div><div class="menu-row-title">問題管理</div><div class="menu-row-desc">新增、刪除投稿頁的問題</div></div>
+        <div class="menu-row-arrow">›</div>
+      </a>
+      <a class="menu-row" href="#control-log">
+        <div><div class="menu-row-title">回覆紀錄</div><div class="menu-row-desc">查看所有人送出的內容</div></div>
+        <div class="menu-row-arrow">›</div>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- 投稿連結 / QR -->
+<div id="control-share-view" class="control-page" style="display:none;">
+  <div class="control-box">
+    <a class="back-link" href="#control">← 返回控制台</a>
+    <h1>投稿連結 / QR code</h1>
+    <div class="ctrl-label">投稿連結</div>
+    <div class="link-row">
+      <input id="submit-url" readonly>
+      <button class="copy-btn" id="copy-btn">複製</button>
+    </div>
+    <div class="qr-wrap"><img id="qr-img" alt="投稿 QR code"></div>
+  </div>
+</div>
+
+<!-- 問題管理 -->
+<div id="control-questions-view" class="control-page" style="display:none;">
+  <div class="control-box">
+    <a class="back-link" href="#control">← 返回控制台</a>
+    <h1>問題管理</h1>
+    <div class="ctrl-label">投稿頁會隨機抽一題顯示</div>
+    <div id="q-list"></div>
+    <div class="q-add-row">
+      <input id="q-new-input" placeholder="輸入新問題…" maxlength="60">
+      <button id="q-add-btn">新增</button>
+    </div>
+    <div class="status-msg" id="q-status"></div>
+  </div>
+</div>
+
+<!-- 回覆紀錄 -->
+<div id="control-log-view" class="control-page" style="display:none;">
+  <div class="control-box">
+    <a class="back-link" href="#control">← 返回控制台</a>
+    <h1>回覆紀錄</h1>
+    <button class="plain-btn" id="log-refresh" style="margin-bottom:14px;">重新整理</button>
+    <div id="log-holder"></div>
+  </div>
+</div>
+
+<!-- 牆面預覽 -->
+<div id="control-preview-view" class="control-page" style="display:none;">
+  <div class="control-box">
+    <a class="back-link" href="#control">← 返回控制台</a>
+    <h1>牆面預覽</h1>
+    <div class="preview-frame-wrap">
+      <iframe id="preview-iframe" title="牆面預覽"></iframe>
+    </div>
+    <div style="margin-top:14px;">
+      <a class="ctrl-btn plain-btn" style="text-decoration:none;" href="#wall" target="_blank" rel="noopener">開啟全螢幕投影 ↗</a>
+    </div>
+  </div>
+</div>
+
+<div id="wall-view" style="display:none;">
+  <div id="board"></div>
+</div>
+
+<div id="submit-view" style="display:none;">
+  <div class="submit-box">
+    <div class="q-label">回答這個問題,答案會出現在大螢幕上</div>
+    <h1 id="question-text">載入中…</h1>
+    <textarea id="msg-input" maxlength="140" placeholder="輸入你的答案…"></textarea>
+    <div class="char-count"><span id="count">0</span>/140</div>
+    <button class="send" id="send-btn">送出</button>
+    <div class="status-msg" id="status"></div>
+  </div>
+</div>
+
+<script>
+  // ===== 在這裡填入你自己的 Firebase Realtime Database 網址 =====
+  const FIREBASE_URL = 'https://meaning-of-life-5f23f-default-rtdb.asia-southeast1.firebasedatabase.app';
+  const NEEDS_SETUP = FIREBASE_URL.includes('YOUR-PROJECT');
+
+  const DEFAULT_QUESTIONS = [
+    '你今天最想跟大家分享的一件事是什麼？',
+    '如果可以立刻學會一個新技能，你想學什麼？',
+    '用三個字形容你現在的心情。',
+    '你最近一次感到驚喜是什麼時候？',
+    '如果今天是假日，你最想做什麼？'
+  ];
+
+  const validRoutes = ['control','control-share','control-questions','control-log','control-preview','wall','submit'];
+  let route = location.hash.replace('#','') || 'control';
+  if(!validRoutes.includes(route)) route = 'control';
+  const viewId = (route === 'control' ? 'control' : route) + '-view';
+  document.getElementById(viewId).style.display =
+    (route === 'wall' || route === 'submit' || route === 'control' || route.startsWith('control-')) ? 'flex' : 'flex';
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function formatTime(ts){
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2,'0');
+    return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // ---------- Firebase 資料存取 ----------
+  async function loadMessages(){
+    if(NEEDS_SETUP) return [];
+    try{
+      const res = await fetch(FIREBASE_URL + '/messages.json');
+      const data = await res.json();
+      if(!data) return [];
+      return Object.keys(data).map(key => ({
+        id: key, text: data[key].text, time: data[key].time
+      }));
+    }catch(e){ return []; }
+  }
+
+  async function pushMessage(text){
+    const res = await fetch(FIREBASE_URL + '/messages.json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, time: Date.now() })
+    });
+    if(!res.ok) throw new Error('write failed');
+  }
+
+  async function loadQuestions(){
+    if(NEEDS_SETUP) return DEFAULT_QUESTIONS.slice();
+    try{
+      const res = await fetch(FIREBASE_URL + '/questions.json');
+      const data = await res.json();
+      return (Array.isArray(data) && data.filter(Boolean).length) ? data.filter(Boolean) : DEFAULT_QUESTIONS.slice();
+    }catch(e){ return DEFAULT_QUESTIONS.slice(); }
+  }
+
+  async function saveQuestions(list){
+    await fetch(FIREBASE_URL + '/questions.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(list)
+    });
+  }
+
+  function setupNoticeHtml(){
+    return '<div class="setup-note">還沒設定資料庫,投稿、問題管理、回覆紀錄暫時不會同步。' +
+      '請建立一個免費的 Firebase Realtime Database,把網址填進檔案最上面的 ' +
+      '<code>FIREBASE_URL</code>,存檔後重新整理這頁。</div>';
+  }
+
+  // ---------- CONTROL 主選單 ----------
+  if(route === 'control'){
+    if(NEEDS_SETUP){
+      document.getElementById('setup-slot').innerHTML = setupNoticeHtml();
+    }
+  }
+
+  // ---------- 投稿連結 / QR ----------
+  if(route === 'control-share'){
+    const submitUrl = location.origin + location.pathname + '#submit';
+    document.getElementById('submit-url').value = submitUrl;
+    document.getElementById('qr-img').src =
+      'https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data=' + encodeURIComponent(submitUrl);
+    document.getElementById('copy-btn').addEventListener('click', () => {
+      navigator.clipboard.writeText(submitUrl);
+    });
+  }
+
+  // ---------- 問題管理 ----------
+  if(route === 'control-questions'){
+    const listEl = document.getElementById('q-list');
+    const statusEl = document.getElementById('q-status');
+    const newInput = document.getElementById('q-new-input');
+    const addBtn = document.getElementById('q-add-btn');
+    let questions = [];
+
+    function renderQuestions(){
+      if(questions.length === 0){
+        listEl.innerHTML = '<div class="log-empty">目前沒有問題</div>';
+        return;
+      }
+      listEl.innerHTML = questions.map((q, i) => `
+        <div class="q-item">
+          <div>${escapeHtml(q)}</div>
+          <button class="q-del" data-i="${i}">✕</button>
+        </div>
+      `).join('');
+      listEl.querySelectorAll('.q-del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const i = Number(btn.dataset.i);
+          questions.splice(i, 1);
+          renderQuestions();
+          await persist();
+        });
+      });
+    }
+
+    async function persist(){
+      if(NEEDS_SETUP){
+        statusEl.textContent = '尚未設定資料庫,變更不會被儲存';
+        statusEl.className = 'status-msg err';
+        return;
+      }
+      try{
+        await saveQuestions(questions);
+        statusEl.textContent = '已儲存';
+        statusEl.className = 'status-msg ok';
+      }catch(e){
+        statusEl.textContent = '儲存失敗,請再試一次';
+        statusEl.className = 'status-msg err';
+      }
+    }
+
+    addBtn.addEventListener('click', async () => {
+      const val = newInput.value.trim();
+      if(!val) return;
+      questions.push(val);
+      newInput.value = '';
+      renderQuestions();
+      await persist();
+    });
+    newInput.addEventListener('keydown', e => {
+      if(e.key === 'Enter') addBtn.click();
+    });
+
+    if(NEEDS_SETUP){
+      listEl.innerHTML = setupNoticeHtml();
+      statusEl.textContent = '目前顯示的是預設題庫';
+      questions = DEFAULT_QUESTIONS.slice();
+    }else{
+      loadQuestions().then(q => { questions = q; renderQuestions(); });
+    }
+  }
+
+  // ---------- 回覆紀錄 ----------
+  if(route === 'control-log'){
+    const holder = document.getElementById('log-holder');
+
+    async function renderLog(){
+      if(NEEDS_SETUP){
+        holder.innerHTML = setupNoticeHtml();
+        return;
+      }
+      holder.innerHTML = '<div class="log-empty">載入中…</div>';
+      const list = await loadMessages();
+      const sorted = list.sort((a,b) => b.time - a.time);
+      if(sorted.length === 0){
+        holder.innerHTML = '<div class="log-empty">還沒有任何回覆</div>';
+        return;
+      }
+      holder.innerHTML = '<table class="log-table"><thead><tr><th>時間</th><th>內容</th></tr></thead><tbody>' +
+        sorted.map(m => `<tr><td class="log-time">${formatTime(m.time)}</td><td>${escapeHtml(m.text)}</td></tr>`).join('') +
+        '</tbody></table>';
+    }
+
+    document.getElementById('log-refresh').addEventListener('click', renderLog);
+    renderLog();
+  }
+
+  // ---------- 牆面預覽 ----------
+  if(route === 'control-preview'){
+    const iframe = document.getElementById('preview-iframe');
+    iframe.src = location.href.split('#')[0] + '#wall';
+  }
+
+  // ---------- WALL VIEW ----------
+  if(route === 'wall'){
+    const board = document.getElementById('board');
+    const seenIds = new Set();
+    const LIFETIME = 120000;
+    const FADE_DURATION = 4000;
+
+    function renderDotCanvas(text, fontSize){
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const family = `600 ${fontSize}px 'Fraunces', serif`;
+      const measureCtx = document.createElement('canvas').getContext('2d');
+      measureCtx.font = family;
+
+      const maxWidth = Math.max(160, Math.min(320, fontSize * 9));
+      const lines = [];
+      let line = '';
+      for(const ch of text){
+        const test = line + ch;
+        if(line && measureCtx.measureText(test).width > maxWidth){
+          lines.push(line); line = ch;
+        }else{ line = test; }
+      }
+      if(line) lines.push(line);
+
+      const lineHeight = fontSize * 1.3;
+      const padding = fontSize * 0.3;
+      let widest = 0;
+      lines.forEach(l => { widest = Math.max(widest, measureCtx.measureText(l).width); });
+
+      const w = Math.max(1, Math.ceil(widest + padding * 2));
+      const h = Math.max(1, Math.ceil(lines.length * lineHeight + padding * 2));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.font = family; ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
+      lines.forEach((l, i) => ctx.fillText(l, padding, padding + i * lineHeight));
+
+      const imgData = ctx.getImageData(0, 0, w * dpr, h * dpr).data;
+      ctx.clearRect(0, 0, w, h);
+
+      const dotSpacing = Math.max(2, fontSize / 10);
+      const dotRadius = dotSpacing * 0.38;
+      ctx.fillStyle = '#111111';
+
+      for(let y = 0; y < h; y += dotSpacing){
+        for(let x = 0; x < w; x += dotSpacing){
+          const jx = x + (Math.random() - 0.5) * dotSpacing * 0.7;
+          const jy = y + (Math.random() - 0.5) * dotSpacing * 0.7;
+          const px = Math.min(w * dpr - 1, Math.max(0, Math.round(jx * dpr)));
+          const py = Math.min(h * dpr - 1, Math.max(0, Math.round(jy * dpr)));
+          const alpha = imgData[(py * w * dpr + px) * 4 + 3];
+          if(alpha > 120 && Math.random() < 0.88){
+            ctx.beginPath();
+            ctx.arc(jx, jy, dotRadius * (0.7 + Math.random() * 0.6), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+      return canvas;
+    }
+
+    function spawnCard(m){
+      const age = Date.now() - m.time;
+      if(age >= LIFETIME) return;
+      seenIds.add(m.id);
+
+      const card = document.createElement('div');
+      card.className = 'msg-card';
+      const top = 6 + Math.random() * 76;
+      const left = 4 + Math.random() * 74;
+      const size = 16 + Math.random() * 26;
+      const rotate = (Math.random() * 6 - 3).toFixed(1);
+      const wobbleDur = (2.6 + Math.random() * 2.2).toFixed(2);
+      const wobbleDelay = (Math.random() * 2.6).toFixed(2);
+
+      card.style.top = top + '%';
+      card.style.left = left + '%';
+      card.style.transform = `rotate(${rotate}deg)`;
+
+      const canvas = renderDotCanvas(m.text, size);
+      canvas.style.animationDuration = wobbleDur + 's';
+      canvas.style.animationDelay = '-' + wobbleDelay + 's';
+      card.appendChild(canvas);
+      board.appendChild(card);
+      requestAnimationFrame(() => card.classList.add('visible'));
+
+      const remaining = LIFETIME - age;
+      setTimeout(() => {
+        card.classList.add('fading');
+        setTimeout(() => {
+          card.remove();
+          seenIds.delete(m.id);
+          // 注意:這裡只從畫面上移除,不會刪除資料庫紀錄,回覆紀錄頁仍看得到
+        }, FADE_DURATION);
+      }, remaining);
+    }
+
+    async function pollWall(){
+      const list = await loadMessages();
+      list.forEach(m => { if(!seenIds.has(m.id)) spawnCard(m); });
+    }
+
+    document.fonts.ready.then(() => {
+      pollWall();
+      setInterval(pollWall, 3000);
+    });
+  }
+
+  // ---------- SUBMIT VIEW ----------
+  if(route === 'submit'){
+    const input = document.getElementById('msg-input');
+    const count = document.getElementById('count');
+    const btn = document.getElementById('send-btn');
+    const status = document.getElementById('status');
+    const questionEl = document.getElementById('question-text');
+
+    loadQuestions().then(qs => {
+      questionEl.textContent = qs[Math.floor(Math.random() * qs.length)];
+    });
+
+    if(NEEDS_SETUP){
+      status.textContent = '資料庫還沒設定好,暫時無法送出';
+      status.className = 'status-msg err';
+      btn.disabled = true;
+    }
+
+    input.addEventListener('input', () => { count.textContent = input.value.length; });
+
+    btn.addEventListener('click', async () => {
+      const text = input.value.trim();
+      if(!text){
+        status.textContent = '請先輸入文字';
+        status.className = 'status-msg err';
+        return;
+      }
+      btn.disabled = true;
+      status.textContent = '送出中…';
+      status.className = 'status-msg';
+      try{
+        await pushMessage(text);
+        input.value = '';
+        count.textContent = '0';
+        status.textContent = '已送出,快看看大螢幕吧!';
+        status.className = 'status-msg ok';
+      }catch(e){
+        status.textContent = '送出失敗,請再試一次';
+        status.className = 'status-msg err';
+      }finally{
+        btn.disabled = false;
+      }
+    });
+  }
+</script>
+</body>
+</html>
