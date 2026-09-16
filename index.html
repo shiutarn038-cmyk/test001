@@ -338,6 +338,7 @@
   ];
 
   const validRoutes = ['control','control-share','control-questions','control-log','control-preview','wall','submit'];
+  window.addEventListener('hashchange', () => { location.reload(); });
   let route = location.hash.replace('#','') || 'control';
   if(!validRoutes.includes(route)) route = 'control';
   const viewId = (route === 'control' ? 'control' : route) + '-view';
