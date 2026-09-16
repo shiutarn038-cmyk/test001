@@ -608,7 +608,7 @@
     btn.addEventListener('click', async () => {
       const text = input.value.trim();
       if(!text){
-        status.textContent = '請先輸入文字';
+        status.textContent = '請輸入文字';
         status.className = 'status-msg err';
         return;
       }
@@ -619,7 +619,7 @@
         await pushMessage(text);
         input.value = '';
         count.textContent = '0';
-        status.textContent = '已送出,快看看大螢幕吧!';
+        status.textContent = '送出成功';
         status.className = 'status-msg ok';
       }catch(e){
         status.textContent = '送出失敗,請再試一次';
