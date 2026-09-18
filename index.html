@@ -175,11 +175,7 @@
   }
   #board{ flex:1; position:relative; width:100%; overflow:hidden; }
   .msg-card{ position:absolute; }
-  .assemble-canvas{
-    position:absolute; top:0; left:0;
-    transition:opacity 0.7s ease;
-  }
-  .assemble-canvas.assemble-done{ opacity:0; }
+  .assemble-canvas{ position:absolute; top:0; left:0; }
   .text-layer{
     position:absolute; top:0; left:0;
     box-sizing:border-box;
@@ -187,21 +183,16 @@
     font-weight:600;
     color:#111111;
     line-height:1.3;
-    opacity:0;
-    transition:opacity 0.7s ease;
     word-break:break-word;
-    will-change:transform;
+    will-change:transform, opacity;
   }
   .text-layer.visible{
-    opacity:1;
-    animation:wobble 3.4s ease-in-out infinite;
+    animation:wobble 5.5s ease-in-out infinite;
   }
   @keyframes wobble{
-    0%{   transform:translate(0,0) rotate(0deg); }
-    25%{  transform:translate(1.4px,-1px) rotate(0.6deg); }
-    50%{  transform:translate(-1px,1.4px) rotate(-0.5deg); }
-    75%{  transform:translate(-1.4px,-1px) rotate(0.4deg); }
-    100%{ transform:translate(0,0) rotate(0deg); }
+    0%{   transform:translate(0,0) rotate(0deg) scale(1); }
+    50%{  transform:translate(2.5px,-3.5px) rotate(1.1deg) scale(1.018); }
+    100%{ transform:translate(0,0) rotate(0deg) scale(1); }
   }
 
   /* ---------- SUBMIT VIEW ---------- */
@@ -632,10 +623,11 @@
       textLayer.style.padding = layout.padding + 'px';
       textLayer.style.width = layout.w + 'px';
       textLayer.textContent = m.text;
-      const wobbleDur = (2.6 + Math.random() * 2.2).toFixed(2);
-      const wobbleDelay = (Math.random() * 2.6).toFixed(2);
+      const wobbleDur = (4.5 + Math.random() * 2).toFixed(2);
+      const wobbleDelay = (Math.random() * 4).toFixed(2);
       textLayer.style.animationDuration = wobbleDur + 's';
       textLayer.style.animationDelay = '-' + wobbleDelay + 's';
+      textLayer.style.opacity = '0';
 
       card.appendChild(canvas);
       card.appendChild(textLayer);
@@ -674,35 +666,44 @@
         ctx.globalAlpha = 1;
       }
 
-      // ---- 聚合:顆粒從四散位置,物理移動到文字形狀 ----
+      // ---- 聚合:顆粒物理移動到文字形狀,同一個時鐘同步驅動文字淡入,單一連續動作 ----
       const totalIn = Math.max(600, ...perPoint.map(p => p.inDelay + p.inDuration)) + 60;
+      const revealStart = totalIn * 0.5; // 過半就開始跟顆粒交疊淡入,不是等顆粒全部到位才觸發
       const inStartT = performance.now();
-      let textRevealed = false;
 
       function assembleFrame(now){
         const elapsed = now - inStartT;
         drawFrame(elapsed, 'inDelay', 'inDuration', 'scatter', 'target', easeSettle, false);
-        if(!textRevealed && elapsed > totalIn * 0.62){
-          textRevealed = true;
-          textLayer.classList.add('visible');
-        }
+
+        const revealT = Math.min(1, Math.max(0, (elapsed - revealStart) / (totalIn - revealStart)));
+        textLayer.style.opacity = String(revealT);
+        canvas.style.opacity = String(1 - revealT);
+
         if(elapsed < totalIn){
           requestAnimationFrame(assembleFrame);
         }else{
-          canvas.classList.add('assemble-done'); // 定格,停止逐幀重繪,只靠 CSS 呼吸晃動
+          textLayer.style.opacity = '1';
+          canvas.style.opacity = '0';
+          textLayer.classList.add('visible'); // 定格後才開始呼吸晃動
         }
       }
       requestAnimationFrame(assembleFrame);
 
-      // ---- 消散:文字鬆動回顆粒,物理往外飄散並淡出 ----
+      // ---- 消散:文字淡出的同時,顆粒同步淡入並物理往外飄散,同樣是單一連續動作 ----
       function disperse(){
         textLayer.classList.remove('visible');
-        canvas.classList.remove('assemble-done');
         const totalOut = Math.max(700, ...perPoint.map(p => p.outDelay + p.outDuration)) + 60;
+        const fadeOutEnd = totalOut * 0.4; // 文字在前 40% 時間內退場,顆粒同步浮現接手
         const outStartT = performance.now();
+
         function disperseFrame(now){
           const elapsed = now - outStartT;
           drawFrame(elapsed, 'outDelay', 'outDuration', 'target', 'scatter', easeDrift, true);
+
+          const fadeT = Math.min(1, Math.max(0, elapsed / fadeOutEnd));
+          textLayer.style.opacity = String(1 - fadeT);
+          canvas.style.opacity = String(Math.min(1, fadeT * 1.3));
+
           if(elapsed < totalOut){
             requestAnimationFrame(disperseFrame);
           }else{
