@@ -175,15 +175,22 @@
   }
   #board{ flex:1; position:relative; width:100%; overflow:hidden; }
   .msg-card{ position:absolute; }
+  .assemble-canvas{
+    position:absolute; top:0; left:0;
+    transition:opacity 0.7s ease;
+  }
+  .assemble-canvas.assemble-done{ opacity:0; }
   .text-layer{
+    position:absolute; top:0; left:0;
+    box-sizing:border-box;
     font-family:'Fraunces', 'Noto Serif TC', serif;
     font-weight:600;
     color:#111111;
     line-height:1.3;
     opacity:0;
-    transition:opacity 1.1s ease;
+    transition:opacity 0.7s ease;
     word-break:break-word;
-    will-change:transform, opacity;
+    will-change:transform;
   }
   .text-layer.visible{
     opacity:1;
@@ -529,6 +536,66 @@
     const board = document.getElementById('board');
     const seenIds = new Set();
     const LIFETIME = 120000;
+    const DOT_FONT = "'Fraunces', 'Noto Serif TC', serif"; // 跟 .text-layer 用同一套字體規則,取樣才會對得起來
+
+    // 計算文字換行版面(給顆粒採樣跟文字圖層共用)
+    function computeLayout(text, fontSize){
+      const family = `600 ${fontSize}px ${DOT_FONT}`;
+      const measureCtx = document.createElement('canvas').getContext('2d');
+      measureCtx.font = family;
+
+      const maxWidth = Math.max(160, Math.min(320, fontSize * 9));
+      const lines = [];
+      let line = '';
+      for(const ch of text){
+        const test = line + ch;
+        if(line && measureCtx.measureText(test).width > maxWidth){
+          lines.push(line); line = ch;
+        }else{ line = test; }
+      }
+      if(line) lines.push(line);
+
+      const lineHeight = fontSize * 1.3;
+      const padding = fontSize * 0.3;
+      let widest = 0;
+      lines.forEach(l => { widest = Math.max(widest, measureCtx.measureText(l).width); });
+
+      const w = Math.max(1, Math.ceil(widest + padding * 2));
+      const h = Math.max(1, Math.ceil(lines.length * lineHeight + padding * 2));
+      return { family, lines, lineHeight, padding, w, h };
+    }
+
+    // 採樣文字形狀上的點,做為顆粒聚合的目標位置
+    function samplePoints(layout, fontSize){
+      const { family, lines, lineHeight, padding, w, h } = layout;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const canvas = document.createElement('canvas');
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.font = family; ctx.fillStyle = '#000'; ctx.textBaseline = 'top';
+      lines.forEach((l, i) => ctx.fillText(l, padding, padding + i * lineHeight));
+      const imgData = ctx.getImageData(0, 0, w * dpr, h * dpr).data;
+
+      const dotSpacing = Math.max(1.3, fontSize / 17);
+      const points = [];
+      for(let y = 0; y < h; y += dotSpacing){
+        for(let x = 0; x < w; x += dotSpacing){
+          const jx = x + (Math.random() - 0.5) * dotSpacing * 0.6;
+          const jy = y + (Math.random() - 0.5) * dotSpacing * 0.6;
+          const px = Math.min(w * dpr - 1, Math.max(0, Math.round(jx * dpr)));
+          const py = Math.min(h * dpr - 1, Math.max(0, Math.round(jy * dpr)));
+          const alpha = imgData[(py * w * dpr + px) * 4 + 3];
+          if(alpha > 110 && Math.random() < 0.92){
+            points.push({ x: jx, y: jy });
+          }
+        }
+      }
+      return points;
+    }
+
+    const easeSettle = t => 1 - Math.pow(1 - t, 3);   // 聚合:快進、慢慢定下來
+    const easeDrift  = t => t * t * t;                 // 消散:慢啟動、逐漸加速飄散
 
     function spawnCard(m){
       const age = Date.now() - m.time;
@@ -536,7 +603,9 @@
       seenIds.add(m.id);
 
       const size = 16 + Math.random() * 26;
-      const maxWidth = Math.max(160, Math.min(320, size * 9));
+      const layout = computeLayout(m.text, size);
+      const points = samplePoints(layout, size);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
       const card = document.createElement('div');
       card.className = 'msg-card';
@@ -545,33 +614,108 @@
       const rotate = (Math.random() * 6 - 3).toFixed(1);
       card.style.top = top + '%';
       card.style.left = left + '%';
+      card.style.width = layout.w + 'px';
+      card.style.height = layout.h + 'px';
       card.style.transform = `rotate(${rotate}deg)`;
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'assemble-canvas';
+      canvas.width = layout.w * dpr; canvas.height = layout.h * dpr;
+      canvas.style.width = layout.w + 'px'; canvas.style.height = layout.h + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
 
       const textLayer = document.createElement('div');
       textLayer.className = 'text-layer';
       textLayer.style.fontSize = size + 'px';
-      textLayer.style.maxWidth = maxWidth + 'px';
+      textLayer.style.lineHeight = layout.lineHeight + 'px';
+      textLayer.style.padding = layout.padding + 'px';
+      textLayer.style.width = layout.w + 'px';
       textLayer.textContent = m.text;
       const wobbleDur = (2.6 + Math.random() * 2.2).toFixed(2);
       const wobbleDelay = (Math.random() * 2.6).toFixed(2);
       textLayer.style.animationDuration = wobbleDur + 's';
       textLayer.style.animationDelay = '-' + wobbleDelay + 's';
 
+      card.appendChild(canvas);
       card.appendChild(textLayer);
       board.appendChild(card);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => textLayer.classList.add('visible'));
-      });
+
+      const dotRadius = Math.max(0.55, size / 36);
+      const perPoint = points.map(p => ({
+        target: p,
+        scatter: {
+          x: p.x + (Math.random() - 0.5) * (layout.w * 1.1 + 80),
+          y: p.y + (Math.random() - 0.5) * (layout.h * 1.1 + 80)
+        },
+        inDelay: Math.random() * 300,
+        inDuration: 560 + Math.random() * 320,
+        outDelay: Math.random() * 240,
+        outDuration: 900 + Math.random() * 500
+      }));
+
+      function drawFrame(elapsed, delayKey, durationKey, fromKey, toKey, easeFn, reverseAlpha){
+        ctx.clearRect(0, 0, layout.w, layout.h);
+        ctx.fillStyle = '#111111';
+        perPoint.forEach(p => {
+          const local = elapsed - p[delayKey];
+          const t = Math.min(1, Math.max(0, local / p[durationKey]));
+          const e = easeFn(t);
+          const from = p[fromKey], to = p[toKey];
+          const x = from.x + (to.x - from.x) * e;
+          const y = from.y + (to.y - from.y) * e;
+          const alpha = reverseAlpha ? (1 - e) : e;
+          const r = dotRadius * (reverseAlpha ? (1 - 0.5 * e) : (0.35 + 0.65 * e));
+          ctx.globalAlpha = alpha;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+      }
+
+      // ---- 聚合:顆粒從四散位置,物理移動到文字形狀 ----
+      const totalIn = Math.max(600, ...perPoint.map(p => p.inDelay + p.inDuration)) + 60;
+      const inStartT = performance.now();
+      let textRevealed = false;
+
+      function assembleFrame(now){
+        const elapsed = now - inStartT;
+        drawFrame(elapsed, 'inDelay', 'inDuration', 'scatter', 'target', easeSettle, false);
+        if(!textRevealed && elapsed > totalIn * 0.62){
+          textRevealed = true;
+          textLayer.classList.add('visible');
+        }
+        if(elapsed < totalIn){
+          requestAnimationFrame(assembleFrame);
+        }else{
+          canvas.classList.add('assemble-done'); // 定格,停止逐幀重繪,只靠 CSS 呼吸晃動
+        }
+      }
+      requestAnimationFrame(assembleFrame);
+
+      // ---- 消散:文字鬆動回顆粒,物理往外飄散並淡出 ----
+      function disperse(){
+        textLayer.classList.remove('visible');
+        canvas.classList.remove('assemble-done');
+        const totalOut = Math.max(700, ...perPoint.map(p => p.outDelay + p.outDuration)) + 60;
+        const outStartT = performance.now();
+        function disperseFrame(now){
+          const elapsed = now - outStartT;
+          drawFrame(elapsed, 'outDelay', 'outDuration', 'target', 'scatter', easeDrift, true);
+          if(elapsed < totalOut){
+            requestAnimationFrame(disperseFrame);
+          }else{
+            card.remove();
+            seenIds.delete(m.id);
+            // 注意:這裡只從畫面上移除,不會刪除資料庫紀錄,回覆紀錄頁仍看得到
+          }
+        }
+        requestAnimationFrame(disperseFrame);
+      }
 
       const remaining = LIFETIME - age;
-      setTimeout(() => {
-        textLayer.classList.remove('visible');
-        setTimeout(() => {
-          card.remove();
-          seenIds.delete(m.id);
-          // 注意:這裡只從畫面上移除,不會刪除資料庫紀錄,回覆紀錄頁仍看得到
-        }, 1200);
-      }, remaining);
+      setTimeout(disperse, remaining);
     }
 
     async function pollWall(){
@@ -608,7 +752,7 @@
     btn.addEventListener('click', async () => {
       const text = input.value.trim();
       if(!text){
-        status.textContent = '請輸入文字';
+        status.textContent = '請先輸入文字';
         status.className = 'status-msg err';
         return;
       }
@@ -619,7 +763,7 @@
         await pushMessage(text);
         input.value = '';
         count.textContent = '0';
-        status.textContent = '送出成功';
+        status.textContent = '已送出,快看看大螢幕吧!';
         status.className = 'status-msg ok';
       }catch(e){
         status.textContent = '送出失敗,請再試一次';
